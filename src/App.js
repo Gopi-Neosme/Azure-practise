@@ -15,15 +15,16 @@ function App() {
           <div className="collapse navbar-collapse" id="navbarNav">
             <ul className="navbar-nav ms-auto">
               <li className="nav-item">
-                <a className="nav-link text-secondary" href="#">Home</a>
+                <a className="nav-link text-secondary" href="/home">Home</a>
               </li>
               <li className="nav-item">
-                <a className="nav-link text-secondary" href="#">About</a>
+                <a className="nav-link text-secondary" href="/about">About</a>
               </li>
               <li className="nav-item">
-                <a className="nav-link text-secondary" href="#">Contact</a>
+                <a className="nav-link text-secondary" href="/contact">Contact</a>
               </li>
             </ul>
+
           </div>
         </div>
       </nav>
