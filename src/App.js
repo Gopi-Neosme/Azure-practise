@@ -6,7 +6,7 @@ function App() {
       {/* Navigation */}
       <nav className="navbar navbar-expand-lg navbar-light bg-white border-bottom shadow-sm">
         <div className="container-fluid">
-          <a className="navbar-brand fw-bold text-dark" href="#">MyApp</a>
+          <a className="navbar-brand fw-bold text-dark" href="/">MyApp</a>
           
           <button className="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span className="navbar-toggler-icon"></span>
