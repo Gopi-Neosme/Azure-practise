@@ -35,7 +35,7 @@ function App() {
           <div className="row">
             <div className="col-12 text-center">
               <h2 className="display-4 fw-bold text-dark mb-4">
-                Welcome to Your App
+                Welcome to Your Azure-App
               </h2>
               <p className="lead text-secondary mb-4 mx-auto" style={{maxWidth: '600px'}}>
                 Build amazing experiences with React. This is a clean, modern starting point for your application.
