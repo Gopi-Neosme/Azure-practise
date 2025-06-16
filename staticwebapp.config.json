@@ -1,0 +1,22 @@
+{
+  "routes": [
+    {
+      "route": "/api/storage",
+      "methods": [
+        "post"
+      ]
+    },
+    {
+      "route": "/api/storage",
+      "methods": [
+        "get"
+      ]
+    },
+    {
+      "route": "/api/auth",
+      "methods": [
+        "post"
+      ]
+    }
+  ]
+}
