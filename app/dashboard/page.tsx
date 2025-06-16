@@ -615,7 +615,6 @@
 //   }
 // }
 
-
 "use client"
 
 import type React from "react"
@@ -704,25 +703,11 @@ export default function DashboardPage() {
   const [debugInfo, setDebugInfo] = useState<any>(null)
   const [editingWidget, setEditingWidget] = useState<Widget | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
 
-  // Use refs to prevent stale closures
-  const widgetsRef = useRef<Widget[]>([])
-  const currentLayoutRef = useRef<DashboardLayout | null>(null)
-  const userIdRef = useRef<string>("")
-
-  // Update refs when state changes
-  useEffect(() => {
-    widgetsRef.current = widgets
-  }, [widgets])
-
-  useEffect(() => {
-    currentLayoutRef.current = currentLayout
-  }, [currentLayout])
-
-  useEffect(() => {
-    userIdRef.current = userId
-  }, [userId])
+  // Refs to track state and prevent infinite loops
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const isUserActionRef = useRef(false)
+  const lastSavedLayoutRef = useRef<string>("")
 
   useEffect(() => {
     const isLoggedIn = localStorage?.getItem("isLoggedIn")
@@ -770,6 +755,12 @@ export default function DashboardPage() {
           console.log("loadDashboard - Setting active layout:", activeLayout)
           setCurrentLayout(activeLayout)
           setWidgets(activeLayout.widgets || [])
+
+          // Store the initial layout hash
+          const layoutHash = JSON.stringify(
+            activeLayout.widgets.map((w:any) => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h })),
+          )
+          lastSavedLayoutRef.current = layoutHash
         } else {
           console.log("loadDashboard - No preferences found, creating default")
           await createDefaultLayout(userIdToLoad)
@@ -834,6 +825,11 @@ export default function DashboardPage() {
 
     setCurrentLayout(defaultLayout)
     setWidgets(defaultWidgets)
+
+    // Store the initial layout hash
+    const layoutHash = JSON.stringify(defaultWidgets.map((w) => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h })))
+    lastSavedLayoutRef.current = layoutHash
+
     await saveDashboard(userIdToCreate, defaultLayout)
   }
 
@@ -857,6 +853,10 @@ export default function DashboardPage() {
       if (!response.ok) {
         throw new Error(data.error || "Failed to save dashboard")
       }
+
+      // Update the saved layout hash
+      const layoutHash = JSON.stringify(layout.widgets.map((w) => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h })))
+      lastSavedLayoutRef.current = layoutHash
     } catch (error) {
       console.error("Error saving dashboard:", error)
     } finally {
@@ -864,20 +864,37 @@ export default function DashboardPage() {
     }
   }, [])
 
+  // Debounced save function
+  const debouncedSave = useCallback(
+    (layout: DashboardLayout) => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+
+      saveTimeoutRef.current = setTimeout(() => {
+        saveDashboard(userId, layout)
+      }, 1000) // 1 second debounce
+    },
+    [userId, saveDashboard],
+  )
+
+  // Handle layout changes from react-grid-layout
   const handleLayoutChange = useCallback(
     (layout: Layout[]) => {
-      // Don't update if we're in the middle of a drag operation
-      if (isDragging) return
+      // Skip if this is a user action (add/remove widget)
+      if (isUserActionRef.current) {
+        console.log("Skipping layout change - user action in progress")
+        return
+      }
 
-      const currentLayoutValue = currentLayoutRef.current
-      const currentWidgets = widgetsRef.current
-      const currentUserId = userIdRef.current
+      if (!currentLayout || !widgets.length) {
+        return
+      }
 
-      if (!currentLayoutValue || !currentWidgets.length) return
+      console.log("handleLayoutChange called with", layout.length, "items")
 
-      console.log("handleLayoutChange called with layout:", layout)
-
-      const updatedWidgets = currentWidgets.map((widget) => {
+      // Create updated widgets with new positions
+      const updatedWidgets = widgets.map((widget) => {
         const layoutItem = layout.find((item) => item.i === widget.id)
         if (layoutItem) {
           return {
@@ -891,23 +908,40 @@ export default function DashboardPage() {
         return widget
       })
 
+      // Check if layout actually changed
+      const newLayoutHash = JSON.stringify(updatedWidgets.map((w) => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h })))
+      if (newLayoutHash === lastSavedLayoutRef.current) {
+        console.log("Layout unchanged, skipping update")
+        return
+      }
+
+      console.log("Layout changed, updating widgets")
+
+      // Update state
       setWidgets(updatedWidgets)
 
       const updatedLayout = {
-        ...currentLayoutValue,
+        ...currentLayout,
         widgets: updatedWidgets,
       }
 
       setCurrentLayout(updatedLayout)
-      saveDashboard(currentUserId, updatedLayout)
+
+      // Debounced save
+      debouncedSave(updatedLayout)
     },
-    [isDragging, saveDashboard],
+    [widgets, currentLayout, debouncedSave],
   )
 
   const addWidget = useCallback(
     (widgetType: string) => {
+      console.log("Adding widget:", widgetType)
+
       const widgetConfig = WIDGET_TYPES.find((w) => w.type === widgetType)
       if (!widgetConfig || !currentLayout) return
+
+      // Set user action flag
+      isUserActionRef.current = true
 
       const newWidget: Widget = {
         id: `widget-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -936,18 +970,26 @@ export default function DashboardPage() {
       setCurrentLayout(updatedLayout)
       saveDashboard(userId, updatedLayout)
       setShowAddWidget(false)
+
+      // Reset user action flag after a delay
+      setTimeout(() => {
+        isUserActionRef.current = false
+      }, 500)
     },
     [currentLayout, widgets, userId, saveDashboard],
   )
 
   const removeWidget = useCallback(
     (widgetId: string) => {
-      console.log("removeWidget called with widgetId:", widgetId)
+      console.log("Removing widget:", widgetId)
 
       if (!currentLayout) {
         console.log("removeWidget - No current layout")
         return
       }
+
+      // Set user action flag
+      isUserActionRef.current = true
 
       const updatedWidgets = widgets.filter((widget) => widget.id !== widgetId)
       console.log("removeWidget - Updated widgets:", updatedWidgets.length)
@@ -962,6 +1004,11 @@ export default function DashboardPage() {
       setCurrentLayout(updatedLayout)
       saveDashboard(userId, updatedLayout)
       setShowDeleteConfirm(null)
+
+      // Reset user action flag after a delay
+      setTimeout(() => {
+        isUserActionRef.current = false
+      }, 500)
     },
     [currentLayout, widgets, userId, saveDashboard],
   )
@@ -971,6 +1018,9 @@ export default function DashboardPage() {
       console.log("updateWidget called with:", { widgetId, updates })
 
       if (!currentLayout) return
+
+      // Set user action flag
+      isUserActionRef.current = true
 
       const updatedWidgets = widgets.map((widget) => (widget.id === widgetId ? { ...widget, ...updates } : widget))
 
@@ -983,6 +1033,11 @@ export default function DashboardPage() {
 
       setCurrentLayout(updatedLayout)
       saveDashboard(userId, updatedLayout)
+
+      // Reset user action flag after a delay
+      setTimeout(() => {
+        isUserActionRef.current = false
+      }, 500)
     },
     [currentLayout, widgets, userId, saveDashboard],
   )
@@ -1004,25 +1059,13 @@ export default function DashboardPage() {
     router.push("/")
   }
 
-  // Grid event handlers
-  const handleDragStart = useCallback(() => {
-    console.log("Drag started")
-    setIsDragging(true)
-  }, [])
-
-  const handleDragStop = useCallback(() => {
-    console.log("Drag stopped")
-    setIsDragging(false)
-  }, [])
-
-  const handleResizeStart = useCallback(() => {
-    console.log("Resize started")
-    setIsDragging(true)
-  }, [])
-
-  const handleResizeStop = useCallback(() => {
-    console.log("Resize stopped")
-    setIsDragging(false)
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
   }, [])
 
   if (isLoading) {
@@ -1111,10 +1154,6 @@ export default function DashboardPage() {
                 isDraggable: widget.isDraggable !== false,
               }))}
               onLayoutChange={handleLayoutChange}
-              onDragStart={handleDragStart}
-              onDragStop={handleDragStop}
-              onResizeStart={handleResizeStart}
-              onResizeStop={handleResizeStop}
               cols={currentLayout?.gridCols || 12}
               rowHeight={currentLayout?.gridRowHeight || 150}
               width={1200}
@@ -1134,7 +1173,6 @@ export default function DashboardPage() {
                     onRemove={() => handleWidgetDelete(widget.id)}
                     onEdit={() => handleWidgetEdit(widget)}
                     onUpdate={(updates) => updateWidget(widget.id, updates)}
-                    isDragging={isDragging}
                   />
                 </div>
               ))}
@@ -1275,9 +1313,23 @@ export default function DashboardPage() {
         }
 
         .widget-header-button {
+          pointer-events: auto !important;
+          z-index: 50 !important;
+          position: relative !important;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 4px;
+        }
+
+        .widget-header-button:hover {
+          background: rgba(255, 255, 255, 0.2);
+        }
+
+        .widget-container .react-grid-item {
           pointer-events: auto;
-          z-index: 10;
-          position: relative;
+        }
+
+        .widget-container .widget-header-button * {
+          pointer-events: none;
         }
       `}</style>
     </div>
@@ -1290,10 +1342,9 @@ interface WidgetComponentProps {
   onRemove: () => void
   onEdit: () => void
   onUpdate: (updates: Partial<Widget>) => void
-  isDragging: boolean
 }
 
-function WidgetComponent({ widget, onRemove, onEdit, onUpdate, isDragging }: WidgetComponentProps) {
+function WidgetComponent({ widget, onRemove, onEdit, onUpdate }: WidgetComponentProps) {
   const getWidgetIcon = (type: string) => {
     const widgetType = WIDGET_TYPES.find((w) => w.type === type)
     return widgetType?.icon || FileText
@@ -1306,6 +1357,7 @@ function WidgetComponent({ widget, onRemove, onEdit, onUpdate, isDragging }: Wid
     (e: React.MouseEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      e.nativeEvent.stopImmediatePropagation()
       console.log("Edit button clicked for widget:", widget.id)
       onEdit()
     },
@@ -1316,6 +1368,7 @@ function WidgetComponent({ widget, onRemove, onEdit, onUpdate, isDragging }: Wid
     (e: React.MouseEvent) => {
       e.preventDefault()
       e.stopPropagation()
+      e.nativeEvent.stopImmediatePropagation()
       console.log("Delete button clicked for widget:", widget.id)
       onRemove()
     },
@@ -1325,7 +1378,16 @@ function WidgetComponent({ widget, onRemove, onEdit, onUpdate, isDragging }: Wid
   return (
     <div className={`h-full flex flex-col ${backgroundColor}`}>
       {/* Widget Header */}
-      <div className="flex items-center justify-between p-3 border-b border-white/10">
+      <div
+        className="flex items-center justify-between p-3 border-b border-white/10"
+        onMouseDown={(e) => {
+          // Only prevent drag if clicking on buttons
+          const target = e.target as HTMLElement
+          if (target.closest(".widget-header-button")) {
+            e.stopPropagation()
+          }
+        }}
+      >
         <div className="flex items-center space-x-2">
           <IconComponent className="w-4 h-4 text-white/80" />
           <h3 className="text-white font-medium text-sm">{widget.title}</h3>
@@ -1333,19 +1395,23 @@ function WidgetComponent({ widget, onRemove, onEdit, onUpdate, isDragging }: Wid
         <div className="flex items-center space-x-1">
           <button
             onClick={handleEditClick}
-            className="widget-header-button p-1 text-white/60 hover:text-white transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            className="widget-header-button p-1 text-white/60 hover:text-white transition-colors relative z-50"
             title="Edit widget"
-            style={{ pointerEvents: "auto" }}
+            type="button"
           >
-            <Settings className="w-3 h-3" />
+            <Settings className="w-3 h-3 pointer-events-none" />
           </button>
           <button
             onClick={handleDeleteClick}
-            className="widget-header-button p-1 text-white/60 hover:text-red-400 transition-colors"
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            className="widget-header-button p-1 text-white/60 hover:text-red-400 transition-colors relative z-50"
             title="Delete widget"
-            style={{ pointerEvents: "auto" }}
+            type="button"
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-3 h-3 pointer-events-none" />
           </button>
         </div>
       </div>
