@@ -1431,7 +1431,7 @@ interface WidgetEditModalProps {
   onSave: (updates: Partial<Widget>) => void
   onClose: () => void
 }
-
+//test
 function WidgetEditModal({ widget, onSave, onClose }: WidgetEditModalProps) {
   const [title, setTitle] = useState(widget.title || "")
   const [selectedColor, setSelectedColor] = useState((widget.config?.color as string) || "from-blue-500 to-blue-700")
