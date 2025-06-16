@@ -58,48 +58,74 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [showAddWidget, setShowAddWidget] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   useEffect(() => {
     const isLoggedIn = localStorage?.getItem("isLoggedIn")
     const email = localStorage?.getItem("userEmail")
+    const storedUserId = localStorage?.getItem("userId")
+
+    console.log("Dashboard useEffect - Login check:", {
+      isLoggedIn,
+      email,
+      storedUserId,
+    })
 
     if (!isLoggedIn) {
       router.push("/")
     } else {
       setUserEmail(email || "")
-      // For demo purposes, we'll use email as userId. In production, you'd get this from your auth system
-      setUserId(email || "")
-      loadDashboard(email || "")
+      // Use email as userId for consistency
+      const effectiveUserId = storedUserId || email || ""
+      setUserId(effectiveUserId)
+      console.log("Dashboard useEffect - Using userId:", effectiveUserId)
+      loadDashboard(effectiveUserId)
     }
   }, [router])
 
-  const loadDashboard = async (userEmail: string) => {
+  const loadDashboard = async (userIdToLoad: string) => {
+    console.log("loadDashboard called with userId:", userIdToLoad)
     setIsLoading(true)
+
     try {
-      const response = await fetch(`/api/dashboard?userId=${encodeURIComponent(userEmail)}`)
-      if (response.ok) {
-        const data = await response.json()
-        if (data.preferences && data.preferences.layouts.length > 0) {
+      const url = `/api/dashboard?userId=${encodeURIComponent(userIdToLoad)}`
+      console.log("loadDashboard - Fetching from URL:", url)
+
+      const response = await fetch(url)
+      const data = await response.json()
+
+      console.log("loadDashboard - Response:", data)
+      setDebugInfo(data.debug)
+
+      if (response.ok && data.success) {
+        if (data.preferences && data.preferences.layouts && data.preferences.layouts.length > 0) {
           const activeLayout =
             data.preferences.layouts.find(
               (layout: DashboardLayout) => layout.name === data.preferences.activeLayoutName,
             ) || data.preferences.layouts[0]
 
+          console.log("loadDashboard - Setting active layout:", activeLayout)
           setCurrentLayout(activeLayout)
           setWidgets(activeLayout.widgets || [])
         } else {
-          // Create default layout if none exists
-          await createDefaultLayout(userEmail)
+          console.log("loadDashboard - No preferences found, creating default")
+          await createDefaultLayout(userIdToLoad)
         }
+      } else {
+        console.error("loadDashboard - API error:", data)
+        await createDefaultLayout(userIdToLoad)
       }
     } catch (error) {
       console.error("Error loading dashboard:", error)
+      await createDefaultLayout(userIdToLoad)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const createDefaultLayout = async (userEmail: string) => {
+  const createDefaultLayout = async (userIdToCreate: string) => {
+    console.log("createDefaultLayout called with userId:", userIdToCreate)
+
     const defaultWidgets: Widget[] = [
       {
         id: "welcome-widget",
@@ -135,23 +161,28 @@ export default function DashboardPage() {
 
     setCurrentLayout(defaultLayout)
     setWidgets(defaultWidgets)
-    await saveDashboard(userEmail, defaultLayout)
+    await saveDashboard(userIdToCreate, defaultLayout)
   }
 
-  const saveDashboard = async (userEmail: string, layout: DashboardLayout) => {
+  const saveDashboard = async (userIdToSave: string, layout: DashboardLayout) => {
+    console.log("saveDashboard called with:", { userIdToSave, layoutName: layout.name })
     setIsSaving(true)
+
     try {
       const response = await fetch("/api/dashboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: userEmail,
+          userId: userIdToSave,
           layout: layout,
         }),
       })
 
+      const data = await response.json()
+      console.log("saveDashboard - Response:", data)
+
       if (!response.ok) {
-        throw new Error("Failed to save dashboard")
+        throw new Error(data.error || "Failed to save dashboard")
       }
     } catch (error) {
       console.error("Error saving dashboard:", error)
@@ -162,6 +193,8 @@ export default function DashboardPage() {
 
   const handleLayoutChange = (layout: Layout[]) => {
     if (!currentLayout) return
+
+    console.log("handleLayoutChange called with layout:", layout)
 
     const updatedWidgets = widgets.map((widget) => {
       const layoutItem = layout.find((item) => item.i === widget.id)
@@ -236,6 +269,7 @@ export default function DashboardPage() {
   const handleLogout = () => {
     localStorage?.removeItem("isLoggedIn")
     localStorage?.removeItem("userEmail")
+    localStorage?.removeItem("userId")
     router.push("/")
   }
 
@@ -245,6 +279,12 @@ export default function DashboardPage() {
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-white text-lg">Loading your dashboard...</p>
+          {debugInfo && (
+            <div className="mt-4 p-4 bg-black/20 rounded-lg text-left text-sm text-white/70">
+              <p>Debug Info:</p>
+              <pre>{JSON.stringify(debugInfo, null, 2)}</pre>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -262,6 +302,7 @@ export default function DashboardPage() {
             <div>
               <h1 className="text-white font-semibold text-lg">Dashboard</h1>
               <p className="text-white/60 text-sm">{userEmail}</p>
+              <p className="text-white/40 text-xs">ID: {userId}</p>
             </div>
           </div>
 
@@ -290,6 +331,16 @@ export default function DashboardPage() {
           </div>
         </div>
       </header>
+
+      {/* Debug Info */}
+      {/* {debugInfo && (
+        <div className="p-4 bg-black/20 text-white/70 text-sm">
+          <details>
+            <summary className="cursor-pointer">Debug Information</summary>
+            <pre className="mt-2 overflow-auto">{JSON.stringify(debugInfo, null, 2)}</pre>
+          </details>
+        </div>
+      )} */}
 
       {/* Dashboard Content */}
       <main className="p-6">

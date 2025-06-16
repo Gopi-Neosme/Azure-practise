@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       console.log('✅ Sign-in successful');
       // Return success
       return NextResponse.json(
-        { message: 'Sign-in successful', user: { email: user.email } },
+        { message: 'Sign-in successful', user: { email: user.email, id: user.id } },
         { status: 200 }
       );
 

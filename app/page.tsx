@@ -17,17 +17,17 @@ export default function Home() {
     e.preventDefault();
     setMessage('');
     setIsLoading(true);
-    
+
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'signup', email: signupEmail, password: signupPassword }),
       });
-      
+
       const data = await res.json();
       setMessage(data.message);
-      
+
       if (res.status === 201) {
         setSignupEmail('');
         setSignupPassword('');
@@ -48,21 +48,23 @@ export default function Home() {
     e.preventDefault();
     setMessage('');
     setIsLoading(true);
-    
+
     try {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'signin', email: signinEmail, password: signinPassword }),
       });
-    
+
       const data = await res.json();
       setMessage(data.message);
-      
+
       if (res.status === 200) {
+        console.log("data", data)
         if (typeof window !== 'undefined') {
           localStorage.setItem('isLoggedIn', 'true');
           localStorage.setItem('userEmail', signinEmail);
+          localStorage.setItem('userId', data?.user?.id);
         }
         setSigninEmail('');
         setSigninPassword('');
@@ -114,21 +116,19 @@ export default function Home() {
             <div className="flex bg-white/5 backdrop-blur-sm">
               <button
                 onClick={() => setActiveTab('signin')}
-                className={`flex-1 py-4 px-6 text-sm font-medium transition-all duration-300 ${
-                  activeTab === 'signin'
+                className={`flex-1 py-4 px-6 text-sm font-medium transition-all duration-300 ${activeTab === 'signin'
                     ? 'bg-white/20 text-blue-300 border-b-2 border-blue-400'
                     : 'text-white/60 hover:text-white/80 hover:bg-white/5'
-                }`}
+                  }`}
               >
                 Sign In
               </button>
               <button
                 onClick={() => setActiveTab('signup')}
-                className={`flex-1 py-4 px-6 text-sm font-medium transition-all duration-300 ${
-                  activeTab === 'signup'
+                className={`flex-1 py-4 px-6 text-sm font-medium transition-all duration-300 ${activeTab === 'signup'
                     ? 'bg-white/20 text-purple-300 border-b-2 border-purple-400'
                     : 'text-white/60 hover:text-white/80 hover:bg-white/5'
-                }`}
+                  }`}
               >
                 Sign Up
               </button>
@@ -142,7 +142,7 @@ export default function Home() {
                     <h2 className="text-2xl font-bold text-white mb-2">Welcome Back</h2>
                     <p className="text-white/60 text-sm">Enter your credentials to access your account</p>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="signin-email">
@@ -159,7 +159,7 @@ export default function Home() {
                         disabled={isLoading}
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="signin-password">
                         Password
@@ -176,7 +176,7 @@ export default function Home() {
                         disabled={isLoading}
                       />
                     </div>
-                    
+
                     <button
                       type="submit"
                       disabled={isLoading}
@@ -192,7 +192,7 @@ export default function Home() {
                       )}
                     </button>
                   </div>
-                  
+
                   <div className="mt-6 text-center">
                     <a href="#" className="text-sm text-blue-300 hover:text-blue-200 transition-colors">
                       Forgot your password?
@@ -205,7 +205,7 @@ export default function Home() {
                     <h2 className="text-2xl font-bold text-white mb-2">Create Account</h2>
                     <p className="text-white/60 text-sm">Join us today and get started in minutes</p>
                   </div>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="signup-email">
@@ -222,7 +222,7 @@ export default function Home() {
                         disabled={isLoading}
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-white/80 mb-2" htmlFor="signup-password">
                         Password
@@ -239,7 +239,7 @@ export default function Home() {
                         disabled={isLoading}
                       />
                     </div>
-                    
+
                     <button
                       type="submit"
                       disabled={isLoading}
@@ -255,7 +255,7 @@ export default function Home() {
                       )}
                     </button>
                   </div>
-                  
+
                   <div className="mt-6 text-center text-sm text-white/60">
                     By signing up, you agree to our{' '}
                     <a href="#" className="text-purple-300 hover:text-purple-200 transition-colors">
@@ -273,11 +273,10 @@ export default function Home() {
 
           {/* Message Display */}
           {message && (
-            <div className={`mt-6 p-4 rounded-2xl text-center backdrop-blur-xl border transition-all duration-300 ${
-              message.includes('successful') || message.includes('created') 
-                ? 'bg-green-500/20 border-green-400/30 text-green-200' 
+            <div className={`mt-6 p-4 rounded-2xl text-center backdrop-blur-xl border transition-all duration-300 ${message.includes('successful') || message.includes('created')
+                ? 'bg-green-500/20 border-green-400/30 text-green-200'
                 : 'bg-red-500/20 border-red-400/30 text-red-200'
-            }`}>
+              }`}>
               <div className="flex items-center justify-center space-x-2">
                 {message.includes('successful') || message.includes('created') ? (
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

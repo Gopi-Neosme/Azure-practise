@@ -1,210 +1,98 @@
-import connectToDatabase from '@/lib/mongoose';
-import DashboardPreferences, { IDashboardLayout, IDashboardPreferences, IWidget } from '@/models/dashboard-preferences';
-import { Types } from 'mongoose';
+import { Types } from "mongoose"
+import DashboardPreferences, { type IDashboardPreferences, type IDashboardLayout } from "@/models/dashboard-preferences"
+import connectToDatabase from "@/lib/mongoose"
 
 export class DashboardService {
-  private static async ensureConnection() {
-    await connectToDatabase();
-  }
-
   static async getUserPreferences(userId: string): Promise<IDashboardPreferences | null> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    let preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
-    if (!preferences) {
-      const defaultPrefs = DashboardPreferences.createDefaultPreferences(objectId);
-      preferences = await DashboardPreferences.create(defaultPrefs);
+    await connectToDatabase()
+
+    let userObjectId: Types.ObjectId
+
+    if (Types.ObjectId.isValid(userId)) {
+      userObjectId = new Types.ObjectId(userId)
+    } else {
+      // Create consistent ObjectId from email/string
+      const hash = userId.split("").reduce((a, b) => {
+        a = (a << 5) - a + b.charCodeAt(0)
+        return a & a
+      }, 0)
+      const hexString = Math.abs(hash).toString(16).padStart(24, "0").substring(0, 24)
+      userObjectId = new Types.ObjectId(hexString)
     }
-    
-    return preferences;
+
+    return await DashboardPreferences.findOne({ userId: userObjectId })
   }
 
-  static async updateWidgetLayout(
-    userId: string, 
-    layoutName: string, 
-    widgets: IWidget[]
-  ): Promise<IDashboardPreferences> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
+  static async createOrUpdatePreferences(userId: string, layout: IDashboardLayout): Promise<IDashboardPreferences> {
+    await connectToDatabase()
+
+    let userObjectId: Types.ObjectId
+
+    if (Types.ObjectId.isValid(userId)) {
+      userObjectId = new Types.ObjectId(userId)
+    } else {
+      const hash = userId.split("").reduce((a, b) => {
+        a = (a << 5) - a + b.charCodeAt(0)
+        return a & a
+      }, 0)
+      const hexString = Math.abs(hash).toString(16).padStart(24, "0").substring(0, 24)
+      userObjectId = new Types.ObjectId(hexString)
+    }
+
+    let preferences = await DashboardPreferences.findOne({ userId: userObjectId })
+
     if (!preferences) {
-      throw new Error('User preferences not found');
+      // Create new preferences
+      preferences = await DashboardPreferences.create({
+        userId: userObjectId,
+        layouts: [layout],
+        activeLayoutName: layout.name,
+        globalSettings: {
+          theme: "dark",
+          autoSave: true,
+          refreshInterval: 300,
+          compactMode: false,
+        },
+      })
+    } else {
+      // Update existing preferences
+      const existingLayoutIndex = preferences.layouts.findIndex((l:any) => l.name === layout.name)
+
+      if (existingLayoutIndex >= 0) {
+        preferences.layouts[existingLayoutIndex] = layout
+      } else {
+        preferences.layouts.push(layout)
+      }
+
+      preferences.activeLayoutName = layout.name
+      await preferences.save()
     }
 
-    const layout = preferences.layouts.find(l => l.name === layoutName);
-    if (!layout) {
-      throw new Error(`Layout "${layoutName}" not found`);
-    }
-
-    layout.widgets = widgets;
-    await preferences.save();
-    
-    return preferences;
+    return preferences
   }
 
-  static async addWidget(
-    userId: string,
-    layoutName: string,
-    widget: IWidget
-  ): Promise<IDashboardPreferences> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
+  static async deleteLayout(userId: string, layoutName: string): Promise<IDashboardPreferences> {
+    await connectToDatabase()
+
+    let userObjectId: Types.ObjectId
+
+    if (Types.ObjectId.isValid(userId)) {
+      userObjectId = new Types.ObjectId(userId)
+    } else {
+      const hash = userId.split("").reduce((a, b) => {
+        a = (a << 5) - a + b.charCodeAt(0)
+        return a & a
+      }, 0)
+      const hexString = Math.abs(hash).toString(16).padStart(24, "0").substring(0, 24)
+      userObjectId = new Types.ObjectId(hexString)
+    }
+
+    const preferences = await DashboardPreferences.findOne({ userId: userObjectId })
+
     if (!preferences) {
-      throw new Error('User preferences not found');
+      throw new Error("User preferences not found")
     }
 
-    const layout = preferences.layouts.find(l => l.name === layoutName);
-    if (!layout) {
-      throw new Error(`Layout "${layoutName}" not found`);
-    }
-
-    const existingWidget = layout.widgets.find(w => w.id === widget.id);
-    if (existingWidget) {
-      throw new Error(`Widget with ID "${widget.id}" already exists`);
-    }
-
-    layout.widgets.push(widget);
-    await preferences.save();
-    
-    return preferences;
-  }
-
-  static async removeWidget(
-    userId: string,
-    layoutName: string,
-    widgetId: string
-  ): Promise<IDashboardPreferences> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
-    if (!preferences) {
-      throw new Error('User preferences not found');
-    }
-
-    const layout = preferences.layouts.find(l => l.name === layoutName);
-    if (!layout) {
-      throw new Error(`Layout "${layoutName}" not found`);
-    }
-
-    const widgetIndex = layout.widgets.findIndex(w => w.id === widgetId);
-    if (widgetIndex === -1) {
-      throw new Error(`Widget with ID "${widgetId}" not found`);
-    }
-
-    layout.widgets.splice(widgetIndex, 1);
-    await preferences.save();
-    
-    return preferences;
-  }
-
-  static async switchLayout(
-    userId: string,
-    layoutName: string
-  ): Promise<IDashboardPreferences> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
-    if (!preferences) {
-      throw new Error('User preferences not found');
-    }
-
-    const layout = preferences.layouts.find(l => l.name === layoutName);
-    if (!layout) {
-      throw new Error(`Layout "${layoutName}" not found`);
-    }
-
-    preferences.activeLayoutName = layoutName;
-    await preferences.save();
-    
-    return preferences;
-  }
-
-  static async createLayout(
-    userId: string,
-    layout: IDashboardLayout
-  ): Promise<IDashboardPreferences> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
-    if (!preferences) {
-      throw new Error('User preferences not found');
-    }
-
-    await preferences.addLayout(layout);
-    return preferences;
-  }
-
-  static async updateGlobalSettings(
-    userId: string,
-    settings: Partial<IDashboardPreferences['globalSettings']>
-  ): Promise<IDashboardPreferences> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
-    if (!preferences) {
-      throw new Error('User preferences not found');
-    }
-
-    preferences.globalSettings = { ...preferences.globalSettings, ...settings };
-    await preferences.save();
-    
-    return preferences;
-  }
-
-  static async getActiveLayout(userId: string): Promise<IDashboardLayout | null> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
-    if (!preferences) {
-      return null;
-    }
-
-    return preferences.layouts.find(l => l.name === preferences.activeLayoutName) || null;
-  }
-
-  static async duplicateLayout(
-    userId: string,
-    sourceLayoutName: string,
-    newLayoutName: string
-  ): Promise<IDashboardPreferences> {
-    await this.ensureConnection();
-    
-    const objectId = new Types.ObjectId(userId);
-    const preferences = await DashboardPreferences.findOne({ userId: objectId });
-    
-    if (!preferences) {
-      throw new Error('User preferences not found');
-    }
-
-    const sourceLayout = preferences.layouts.find(l => l.name === sourceLayoutName);
-    if (!sourceLayout) {
-      throw new Error(`Source layout "${sourceLayoutName}" not found`);
-    }
-
-    const newLayout: IDashboardLayout = {
-      ...JSON.parse(JSON.stringify(sourceLayout)),
-      name: newLayoutName,
-      isDefault: false
-    };
-
-    await preferences.addLayout(newLayout);
-    return preferences;
+    return await preferences.deleteLayout(layoutName)
   }
 }
