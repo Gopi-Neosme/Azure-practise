@@ -777,6 +777,7 @@ export default function DashboardPage() {
     }
   }
 
+  //test
   const createDefaultLayout = async (userIdToCreate: string) => {
     console.log("createDefaultLayout called with userId:", userIdToCreate)
 
