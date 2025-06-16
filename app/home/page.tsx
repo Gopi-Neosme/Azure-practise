@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import FileUploadComponent from "./FileUpload"
+// import FileUploadComponent from "./FileUpload"
 import Image from "next/image"
 
 interface FileItem {
@@ -585,7 +585,7 @@ export default function HomePage() {
               </button>
             </div>
 
-            <FileUploadComponent onUploadSuccess={handleFileUpload} />
+            {/* <FileUploadComponent onUploadSuccess={handleFileUpload} /> */}
           </div>
         </div>
       )}
